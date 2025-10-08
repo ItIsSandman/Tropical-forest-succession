@@ -1,0 +1,71 @@
+library(readxl)
+library(tidyverse)
+library(MASS)
+library(ggh4x)
+library(ggplot2)
+library(car)
+library(emmeans)
+library(lmerTest)
+library(multcomp)
+library(scales)
+library(lsmeans)
+library(rstatix)
+library(vegan)
+library(adespatial)
+
+species <- read_xlsx("EM_Tropical_forest_succession.xlsx")
+env <- read_xlsx("EM_Tropical_forest_succession.xlsx", sheet = 3)
+
+species$Site <- paste(species$Site, species$Age)
+matrix <- species %>% column_to_rownames("Site")
+matrix <- select(matrix, "Herb", "Grass", "Fern", "Vine", "Liana", "Shrub", "Tree")
+year1 <- c(1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58,61,64,67,70,73,76,79,82,85,88)
+year2 <- c(2,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47,50,53,56,59,62,65,68,71,74,77,80,83,86,89)
+year3 <- c(3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90)
+
+#Distances between the years
+TBI1 <-TBI(matrix[year1, ], matrix[year3, ], method = "%difference")
+TBI2 <-TBI(matrix[year1, ], matrix[year2, ], method = "%difference")
+TBI3 <-TBI(matrix[year2, ], matrix[year3, ], method = "%difference")
+
+#create new data frame with TBI
+Sites <- as.data.frame(c(01:30))
+Sites$Forest_type <- c(rep("Dry", 16), rep("Wet", 14))
+Sites$Number <- c(01:16, 01:14)
+Sites$Number <- sprintf("%02d", Sites$Number)
+Sites$Site <- paste(Sites$Forest_type, Sites$Number, sep = "")
+Sites$TBI1_3 <- TBI1$TBI
+Sites$TBI1_2 <- TBI2$TBI
+Sites$TBI2_3 <- TBI3$TBI
+
+$T-test between wet and dry forests
+tapply(X = Sites$TBI1_3, INDEX = Sites$Forest_type, FUN = shapiro.test)
+leveneTest(TBI1_3~Forest_type, data = Sites, center = median)
+t.test(TBI1_3 ~ Forest_type, data = Sites, var.equal = TRUE)
+
+#Create dataset with TBI and environmental data
+distance <- merge(Sites, env, by = c("Site"))
+distance$Site <- as.factor(distance$Site)
+distance$Forest_type.x <- as.factor(distance$Forest_type.x)
+
+#GLM's with of the different years
+glm1 <- glm(log(TBI1_3)~ Forest_type.x + scale(Surrounding_forest_cover_800) + scale(Organic_matter) +scale(Nitrogen) + scale(Phosphorus) + scale(Potassium), data= distance)
+shapiro.test(glm1$residuals)
+vif(glm1)
+summary(glm1)            
+glm1 <- step(glm1, direction = "backward")
+summary(glm1)
+
+glm2 <- glm(log(TBI1_2)~ Forest_type.x + scale(Surrounding_forest_cover_800) + scale(Organic_matter) +scale(Nitrogen) + scale(Phosphorus) + scale(Potassium), data= distance)
+shapiro.test(glm2$residuals)
+vif(glm2)
+summary(glm2)            
+glm2 <- step(glm2, direction = "backward")
+summary(glm2)
+
+glm3 <- glm(log(TBI2_3)~ Forest_type.x + scale(Surrounding_forest_cover_800) + scale(Organic_matter) +scale(Nitrogen) + scale(Phosphorus) + scale(Potassium), data= distance)
+shapiro.test(glm3$residuals)
+vif(glm3)
+summary(glm3)            
+glm3 <- step(glm3, direction = "backward")
+summary(glm3)
